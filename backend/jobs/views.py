@@ -1,12 +1,18 @@
+
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from .models import Job
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 def job_list(request):
-    jobs = Job.objects.filter(is_active=True)
+
+    # Display only active jobs approved by the admin
+    jobs = Job.objects.filter(
+        is_active=True,
+        status="Approved"
+    ).order_by("-created_at")
 
     data = []
 
@@ -20,7 +26,10 @@ def job_list(request):
             "salary": job.salary,
             "description": job.description,
             "requirements": job.requirements,
+            "is_verified": job.is_verified,
+            "application_url": job.application_url,
             "created_at": job.created_at,
+            "updated_at": job.updated_at,
         })
 
     return Response(data)
