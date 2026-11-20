@@ -390,27 +390,58 @@ async function handleJobSubmit(e) {
   }
 
   // SUBMIT DRAFT FOR ADMIN APPROVAL
-  function submitJobForApproval(jobId) {
-    if (!isVerified) {
-      alert("Your company must be verified before submitting jobs.");
+ 
+async function submitJobForApproval(jobId) {
+  if (!isVerified) {
+    alert("Your company must be verified before submitting jobs.");
+    return;
+  }
+
+  const token = localStorage.getItem("nearbyJobsToken");
+
+  if (!token) {
+    alert("Please log in again.");
+    return;
+  }
+
+  const apiBaseUrl = (
+    import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8001"
+  ).replace(/\/+$/, "");
+
+  try {
+    const response = await fetch(
+      `${apiBaseUrl}/api/company/jobs/${jobId}/submit/`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Token ${token}`
+        }
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      alert(data.error || data.detail || "Could not submit job.");
+      console.error("Job approval submission error:", data);
       return;
     }
 
     const updatedJobs = jobs.map((item) =>
       item.id === jobId
-        ? {
-            ...item,
-            status: "Pending Admin Approval",
-            submittedAt: new Date().toLocaleDateString("en-IN"),
-            reviewedAt: null
-          }
+        ? { ...item, status: "Pending Admin Approval" }
         : item
     );
 
     saveJobs(updatedJobs);
 
     alert("Job submitted successfully for admin approval!");
+  } catch (error) {
+    console.error("Job submission error:", error);
+    alert("Could not connect to the server. Please try again.");
   }
+}
+
 
   // DELETE DRAFT
   function deleteDraft(jobId) {
