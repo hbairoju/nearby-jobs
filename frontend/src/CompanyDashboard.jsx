@@ -530,19 +530,55 @@ async function submitJobForApproval(jobId) {
 
 
   // DELETE DRAFT
-  function deleteDraft(jobId) {
-    const confirmDelete = window.confirm(
-      "Are you sure you want to delete this draft?"
+  
+async function deleteDraft(jobId) {
+  const confirmDelete = window.confirm(
+    "Are you sure you want to permanently delete this draft?"
+  );
+
+  if (!confirmDelete) return;
+
+  const token = localStorage.getItem("nearbyJobsToken");
+
+  if (!token) {
+    alert("Please log in again.");
+    return;
+  }
+
+  const apiBaseUrl = (
+    import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8001"
+  ).replace(/\/+$/, "");
+
+  try {
+    const response = await fetch(
+      `${apiBaseUrl}/api/company/jobs/${jobId}/`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Token ${token}`
+        }
+      }
     );
 
-    if (!confirmDelete) return;
+    if (!response.ok) {
+      const data = await response.json();
+      alert(data.error || data.detail || "Could not delete the job.");
+      return;
+    }
 
     const updatedJobs = jobs.filter(
       (item) => item.id !== jobId
     );
 
     saveJobs(updatedJobs);
+
+    alert("Job deleted successfully from the database!");
+  } catch (error) {
+    console.error("Job deletion error:", error);
+    alert("Could not connect to the server. Please try again.");
   }
+}
+
 
   // VERIFICATION MESSAGE
   function getVerificationMessage() {
