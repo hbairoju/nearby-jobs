@@ -1,5 +1,6 @@
 
 from django.db import models
+from django.contrib.auth.models import User
 
 
 class Job(models.Model):
@@ -19,6 +20,14 @@ class Job(models.Model):
         ("Rejected", "Rejected"),
     ]
 
+    owner = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="company_jobs",
+        null=True,
+        blank=True
+    )
+
     title = models.CharField(max_length=200)
     company = models.CharField(max_length=200)
     location = models.CharField(max_length=100)
@@ -29,7 +38,6 @@ class Job(models.Model):
     )
 
     salary = models.CharField(max_length=100, blank=True)
-
     description = models.TextField()
     requirements = models.TextField(blank=True)
 
@@ -45,7 +53,6 @@ class Job(models.Model):
     application_url = models.URLField(blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
-
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):

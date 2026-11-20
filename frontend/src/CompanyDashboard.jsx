@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Building2,
   BriefcaseBusiness,
@@ -66,7 +66,109 @@ function CompanyDashboard({ onBack }) {
 
   const [job, setJob] = useState(emptyJob);
 
-  const isVerified = verificationRequest?.status === "Approved";
+const [isVerified, setIsVerified] = useState(false);
+useEffect(() => {
+  const fetchVerificationStatus = async () => {
+    const token = localStorage.getItem("nearbyJobsToken");
+
+    if (!token) return;
+
+    const apiBaseUrl = (
+      import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8001"
+    ).replace(/\/+$/, "");
+
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/api/accounts/verification/status/`,
+        {
+          headers: {
+            Authorization: `Token ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        console.error("Could not fetch verification status.");
+        return;
+      }
+
+      const data = await response.json();
+
+      setIsVerified(data.company_verified);
+
+      setVerificationRequest(
+        data.status
+          ? {
+              companyName: data.company_name,
+              email: data.email,
+              status: data.status,
+              rejectionReason: data.rejection_reason,
+            }
+          : null
+      );
+    } catch (error) {
+      console.error("Verification status error:", error);
+    }
+  };
+
+  fetchVerificationStatus();
+}, []);
+useEffect(() => {
+  const fetchCompanyJobs = async () => {
+    const token = localStorage.getItem("nearbyJobsToken");
+
+    if (!token || !isVerified) {
+      setJobs([]);
+      return;
+    }
+
+    const apiBaseUrl = (
+      import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8001"
+    ).replace(/\/+$/, "");
+
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/api/company/jobs/`,
+        {
+          headers: {
+            Authorization: `Token ${token}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error("Could not load company jobs:", data);
+        return;
+      }
+
+      const formattedJobs = data.map((item) => ({
+        id: item.id,
+        title: item.title,
+        location: item.location,
+        type: item.job_type,
+        salary: item.salary,
+        description: item.description,
+        requirements: item.requirements,
+        status: item.status,
+        companyName: item.company,
+        applicationUrl: item.application_url,
+        isVerified: item.is_verified,
+      }));
+
+      setJobs(formattedJobs);
+      localStorage.setItem(
+        "nearbyJobsCompanyPosts",
+        JSON.stringify(formattedJobs)
+      );
+    } catch (error) {
+      console.error("Company jobs loading error:", error);
+    }
+  };
+
+  fetchCompanyJobs();
+}, [isVerified]);
 
   // JOB STATUS COUNTS
   const draftCount = jobs.filter(
@@ -106,60 +208,66 @@ function CompanyDashboard({ onBack }) {
   }
 
   // SUBMIT COMPANY VERIFICATION
-  function handleVerificationSubmit(e) {
-    e.preventDefault();
+ 
+async function handleVerificationSubmit(e) {
+  e.preventDefault();
 
-    if (!verification.document) {
-      alert("Please upload a company document.");
-      return;
-    }
+  if (!verification.document) {
+    alert("Please upload a company document.");
+    return;
+  }
 
-    const existingRequests = JSON.parse(
-      localStorage.getItem("nearbyJobsVerificationRequests") || "[]"
+  const token = localStorage.getItem("nearbyJobsToken");
+
+  if (!token) {
+    alert("Please log in to your company account first.");
+    return;
+  }
+
+  const formData = new FormData();
+
+  formData.append("companyName", verification.companyName);
+  formData.append("website", verification.website);
+  formData.append("email", verification.email);
+  formData.append("phone", verification.phone);
+  formData.append("address", verification.address);
+  formData.append("document", verification.document);
+
+  const apiBaseUrl = (
+    import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8001"
+  ).replace(/\/+$/, "");
+
+  try {
+    const response = await fetch(
+      `${apiBaseUrl}/api/accounts/verification/`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Token ${token}`
+        },
+        body: formData
+      }
     );
 
-    const existingRequest = existingRequests.find(
-      (request) =>
-        request.email.toLowerCase() ===
-          verification.email.trim().toLowerCase() &&
-        request.status !== "Rejected"
-    );
+    const data = await response.json();
 
-    if (existingRequest) {
-      setVerificationRequest(existingRequest);
-
-      alert(
-        `A verification request already exists. Status: ${existingRequest.status}`
-      );
-      return;
+    if (!response.ok) {
+      throw new Error(data.error || "Verification submission failed.");
     }
 
     const newRequest = {
-      id: Date.now(),
       companyName: verification.companyName,
-      website: verification.website,
-      email: verification.email.trim(),
-      phone: verification.phone,
-      address: verification.address,
-      documentName: verification.document.name,
-      status: "Pending",
-      submittedAt: new Date().toLocaleDateString("en-IN")
+      email: verification.email,
+      status: data.status
     };
-
-    const updatedRequests = [
-      ...existingRequests,
-      newRequest
-    ];
-
-    localStorage.setItem(
-      "nearbyJobsVerificationRequests",
-      JSON.stringify(updatedRequests)
-    );
 
     setVerificationRequest(newRequest);
 
     alert("Company verification request submitted successfully!");
+  } catch (error) {
+    alert(error.message || "Unable to connect to the server.");
   }
+}
 
   // JOB INPUTS
   function handleJobChange(e) {

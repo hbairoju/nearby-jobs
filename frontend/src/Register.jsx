@@ -3,9 +3,6 @@ import { useState } from "react";
 import {
   User,
   Building2,
-  Mail,
-  Phone,
-  Lock,
   ArrowLeft
 } from "lucide-react";
 
@@ -23,6 +20,10 @@ function Register({ onBack, onLogin }) {
     confirmPassword: ""
   });
 
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
   function handleChange(e) {
     setForm({
       ...form,
@@ -30,23 +31,94 @@ function Register({ onBack, onLogin }) {
     });
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
 
+    setError("");
+    setSuccess("");
+
     if (form.password !== form.confirmPassword) {
-      alert("Passwords do not match!");
+      setError("Passwords do not match.");
       return;
     }
 
-    alert(
-      "Registration UI is ready! Real account creation will be connected with the backend."
-    );
+    const apiBaseUrl = (
+      import.meta.env.VITE_API_BASE_URL ||
+      "http://127.0.0.1:8001"
+    ).replace(/\/+$/, "");
+
+    const payload = {
+      name: form.name.trim(),
+      companyName: form.companyName.trim(),
+      email: form.email.trim().toLowerCase(),
+      mobile: form.mobile.trim(),
+      education: form.education.trim(),
+      website: form.website.trim(),
+      password: form.password,
+      accountType
+    };
+
+    try {
+      setLoading(true);
+
+      const response = await fetch(
+        `${apiBaseUrl}/api/accounts/register/`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+          Object.values(data).flat().join(" ") ||
+          "Registration failed."
+        );
+      }
+
+      localStorage.setItem("nearbyJobsToken", data.token);
+      localStorage.setItem("nearbyJobsAccountType", data.account_type);
+      localStorage.setItem("nearbyJobsEmail", data.email);
+
+      setSuccess(
+        "Account created successfully! You can now log in."
+      );
+
+      setForm({
+        name: "",
+        companyName: "",
+        email: "",
+        mobile: "",
+        education: "",
+        website: "",
+        password: "",
+        confirmPassword: ""
+      });
+
+    } catch (err) {
+      setError(
+        err.message || "Unable to connect to the backend."
+      );
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <button className="auth-back" onClick={onBack}>
+
+        <button
+          className="auth-back"
+          onClick={onBack}
+          type="button"
+        >
           <ArrowLeft size={18} /> Back to Home
         </button>
 
@@ -71,7 +143,16 @@ function Register({ onBack, onLogin }) {
           </button>
         </div>
 
+        {error && (
+          <p style={{ color: "red" }}>{error}</p>
+        )}
+
+        {success && (
+          <p style={{ color: "green" }}>{success}</p>
+        )}
+
         <form onSubmit={handleSubmit}>
+
           {accountType === "jobseeker" ? (
             <>
               <label>Full Name</label>
@@ -158,9 +239,16 @@ function Register({ onBack, onLogin }) {
             required
           />
 
-          <button className="auth-submit" type="submit">
-            Register as {accountType === "jobseeker" ? "Job Seeker" : "Company"}
+          <button
+            className="auth-submit"
+            type="submit"
+            disabled={loading}
+          >
+            {loading
+              ? "Creating Account..."
+              : `Register as ${accountType === "jobseeker" ? "Job Seeker" : "Company"}`}
           </button>
+
         </form>
 
         <p className="auth-switch">
@@ -169,6 +257,7 @@ function Register({ onBack, onLogin }) {
             Login
           </button>
         </p>
+
       </div>
     </div>
   );

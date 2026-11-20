@@ -1,6 +1,4 @@
-
-import { useState } from "react";
-
+import { useEffect, useState } from "react";
 import Application from "./Application";
 import Profile from "./Profile";
 import Register from "./Register";
@@ -216,14 +214,96 @@ function App() {
   const [showSavedJobs, setShowSavedJobs] = useState(false);
   const [showCompanyDashboard, setShowCompanyDashboard] = useState(false);
   const [showAdminDashboard, setShowAdminDashboard] = useState(false);
+const [apiJobs, setApiJobs] = useState([]);
+const [jobsLoading, setJobsLoading] = useState(true);
+const [jobsError, setJobsError] = useState("");
+const [loggedInUser, setLoggedInUser] = useState(() => {
+  const token = localStorage.getItem("nearbyJobsToken");
 
+  if (!token) return null;
+
+  return {
+    token,
+    accountType: localStorage.getItem("nearbyJobsAccountType"),
+    email: localStorage.getItem("nearbyJobsEmail")
+  };
+});
+
+// FETCH APPROVED JOBS FROM THE DJANGO BACKEND
+useEffect(() => {
+  let cancelled = false;
+
+  async function fetchJobs() {
+    try {
+      setJobsLoading(true);
+      setJobsError("");
+
+const apiBaseUrl = (
+        import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8001"
+      ).replace(/\/+$/, "");
+
+      const response = await fetch(`${apiBaseUrl}/api/jobs/`);
+
+      if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (!Array.isArray(data)) {
+        throw new Error("The server returned an unexpected response.");
+      }
+
+      const formattedJobs = data.map(job => ({
+        ...job,
+        id: job.id,
+        title: job.title || "Untitled job",
+        company: job.company || "Company not provided",
+        city: job.location || "Location not provided",
+        type: formatJobType(job.job_type || "Other"),
+        salary: job.salary || "Not specified",
+        duration: job.duration || "Not specified",
+        experience: job.experience || "Not specified",
+        skills: Array.isArray(job.skills) ? job.skills : [],
+        responsibilities: Array.isArray(job.responsibilities)
+          ? job.responsibilities
+          : [],
+        description: job.description || "No description provided.",
+        requirements: job.requirements || "Not specified",
+        is_verified: Boolean(job.is_verified)
+      }));
+
+      if (!cancelled) {
+        setApiJobs(formattedJobs);
+      }
+    } catch (error) {
+      console.error("Failed to load jobs from Django:", error);
+
+      if (!cancelled) {
+        setJobsError(
+          "Unable to load jobs from the server. Please check that the Django backend is running."
+        );
+      }
+    } finally {
+      if (!cancelled) {
+        setJobsLoading(false);
+      }
+    }
+  }
+
+  fetchJobs();
+
+  return () => {
+    cancelled = true;
+  };
+}, []);
   // LOAD APPROVED COMPANY JOBS
   const [companyJobs, setCompanyJobs] = useState(
     loadApprovedCompanyJobs
   );
 
-  // COMBINE SAMPLE JOBS AND APPROVED COMPANY JOBS
-  const jobs = [...sampleJobs, ...companyJobs];
+  // PUBLIC JOB LIST: LOAD JOBS FROM THE DJANGO DATABASE
+  const jobs = apiJobs;
 
   // REFRESH COMPANY JOBS AFTER RETURNING FROM DASHBOARDS
   function refreshCompanyJobs() {
@@ -269,7 +349,17 @@ function App() {
     setShowApplication(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
+function handleLogout() {
+  localStorage.removeItem("nearbyJobsToken");
+  localStorage.removeItem("nearbyJobsAccountType");
+  localStorage.removeItem("nearbyJobsEmail");
 
+  setLoggedInUser(null);
+  setShowLogin(false);
+  setShowRegister(false);
+
+  alert("You have logged out successfully.");
+}
   // SAVE / REMOVE JOB
   function toggleSave(id) {
     setSavedJobs(old => {
@@ -371,13 +461,14 @@ function App() {
   // LOGIN PAGE
   if (showLogin) {
     return (
-      <Login
-        onBack={() => setShowLogin(false)}
-        onRegister={() => {
-          setShowLogin(false);
-          setShowRegister(true);
-        }}
-      />
+    <Login
+  onBack={() => setShowLogin(false)}
+  onLogin={(user) => setLoggedInUser(user)}
+  onRegister={() => {
+    setShowLogin(false);
+    setShowRegister(true);
+  }}
+/>
     );
   }
 
@@ -426,57 +517,45 @@ function App() {
 
         <div className="nav-actions">
 
-          <button
-            className="login-btn"
-            onClick={() => setShowMyApplications(true)}
-          >
-            My Applications
-          </button>
+          {loggedInUser ? (
+  <>
+    <span className="login-btn">
+      {loggedInUser.email}
+      {" ("}
+      {loggedInUser.accountType === "company"
+        ? "Company"
+        : "Job Seeker"}
+      {")"}
+    </span>
+        {loggedInUser.accountType === "company" && (
+  <button
+    className="register-btn"
+    onClick={() => setShowCompanyDashboard(true)}
+  >
+    Company Dashboard
+  </button>
+)}
+    <button className="register-btn" onClick={handleLogout}>
+      Logout
+    </button>
+  </>
+) : (
+  <>
+    <button
+      className="login-btn"
+      onClick={() => setShowLogin(true)}
+    >
+      Login
+    </button>
 
-          <button
-            className="login-btn"
-            onClick={() => setShowSavedJobs(true)}
-          >
-            <Bookmark size={16} />
-            Saved Jobs ({savedJobs.length})
-          </button>
-
-          <button
-            className="login-btn"
-            onClick={() => setShowProfile(true)}
-          >
-            My Profile
-          </button>
-
-          <button
-            className="login-btn"
-            onClick={() => setShowCompanyDashboard(true)}
-          >
-            <Building2 size={16} />
-            Company Dashboard
-          </button>
-
-          <button
-            className="login-btn"
-            onClick={() => setShowAdminDashboard(true)}
-          >
-            <ShieldCheck size={16} />
-            Admin Dashboard
-          </button>
-
-          <button
-            className="login-btn"
-            onClick={() => setShowLogin(true)}
-          >
-            Login
-          </button>
-
-          <button
-            className="register-btn"
-            onClick={() => setShowRegister(true)}
-          >
-            Register
-          </button>
+    <button
+      className="register-btn"
+      onClick={() => setShowRegister(true)}
+    >
+      Register
+    </button>
+  </>
+)}
 
         </div>
       </header>
@@ -767,7 +846,19 @@ function App() {
 
             <div className="job-list">
 
-              {filteredJobs.map(job => (
+              {jobsLoading && (
+                <div className="empty-state">
+                  Loading jobs from the server...
+                </div>
+              )}
+
+              {!jobsLoading && jobsError && (
+                <div className="empty-state">
+                  {jobsError}
+                </div>
+              )}
+
+              {!jobsLoading && !jobsError && filteredJobs.map(job => (
 
                 <article className="job-card" key={job.id}>
 
@@ -820,9 +911,9 @@ function App() {
 
               ))}
 
-              {filteredJobs.length === 0 && (
+              {!jobsLoading && !jobsError && filteredJobs.length === 0 && (
                 <div className="empty-state">
-                  No matching jobs found. Try another search.
+                  No approved jobs found. Please check again later.
                 </div>
               )}
 

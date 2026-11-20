@@ -42,7 +42,9 @@ INSTALLED_APPS = [
 
     "corsheaders",
     "rest_framework",
+    "rest_framework.authtoken",
     "jobs",
+    "accounts",
 ]
 
 
@@ -153,6 +155,9 @@ CSRF_TRUSTED_ORIGINS = [
 
 if render_hostname:
     CSRF_TRUSTED_ORIGINS.append(f"https://{render_hostname}")
+
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
 
 # Default primary key

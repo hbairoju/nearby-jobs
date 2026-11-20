@@ -1,8 +1,8 @@
 
 import { useState } from "react";
-import { Mail, Phone, Lock, ArrowLeft } from "lucide-react";
+import { Mail, Phone, ArrowLeft } from "lucide-react";
 
-function Login({ onBack, onRegister }) {
+function Login({ onBack, onRegister, onLogin  }) {
   const [method, setMethod] = useState("email");
   const [accountType, setAccountType] = useState("jobseeker");
   const [email, setEmail] = useState("");
@@ -10,20 +10,86 @@ function Login({ onBack, onRegister }) {
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
 
-  function handleLogin(e) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  async function handleLogin(e) {
     e.preventDefault();
 
-    alert(
-      method === "email"
-        ? "Email login UI is ready. Real authentication will be added with the backend."
-        : "Mobile OTP login UI is ready. Real OTP verification will be added with the backend."
-    );
+    setError("");
+    setSuccess("");
+
+    if (method === "mobile") {
+      setError("Mobile OTP login is not connected yet. Please use email login.");
+      return;
+    }
+
+    const apiBaseUrl = (
+      import.meta.env.VITE_API_BASE_URL ||
+      "http://127.0.0.1:8001"
+    ).replace(/\/+$/, "");
+
+    try {
+      setLoading(true);
+
+      const response = await fetch(
+        `${apiBaseUrl}/api/accounts/login/`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            email: email.trim().toLowerCase(),
+            password,
+            accountType
+          })
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || "Login failed. Please check your details."
+        );
+      }
+
+      localStorage.setItem("nearbyJobsToken", data.token);
+      localStorage.setItem("nearbyJobsAccountType", data.account_type);
+      localStorage.setItem("nearbyJobsEmail", data.email);
+
+      onLogin?.({
+  token: data.token,
+  accountType: data.account_type,
+  email: data.email
+});
+
+      setSuccess("Login successful!");
+
+      setTimeout(() => {
+        onBack();
+      }, 800);
+
+    } catch (err) {
+      setError(
+        err.message || "Unable to connect to the backend."
+      );
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <button className="auth-back" onClick={onBack}>
+
+        <button
+          className="auth-back"
+          onClick={onBack}
+          type="button"
+        >
           <ArrowLeft size={18} /> Back to Home
         </button>
 
@@ -66,7 +132,16 @@ function Login({ onBack, onRegister }) {
           </button>
         </div>
 
+        {error && (
+          <p style={{ color: "red" }}>{error}</p>
+        )}
+
+        {success && (
+          <p style={{ color: "green" }}>{success}</p>
+        )}
+
         <form onSubmit={handleLogin}>
+
           {method === "email" ? (
             <>
               <label>Email Address</label>
@@ -109,15 +184,23 @@ function Login({ onBack, onRegister }) {
                 maxLength={6}
                 required
               />
+
               <p className="otp-note">
-                OTP sending and verification will be connected later.
+                Mobile OTP login will be connected separately.
               </p>
             </>
           )}
 
-          <button className="auth-submit" type="submit">
-            Login as {accountType === "jobseeker" ? "Job Seeker" : "Company"}
+          <button
+            className="auth-submit"
+            type="submit"
+            disabled={loading}
+          >
+            {loading
+              ? "Logging in..."
+              : `Login as ${accountType === "jobseeker" ? "Job Seeker" : "Company"}`}
           </button>
+
         </form>
 
         <p className="auth-switch">
@@ -126,6 +209,7 @@ function Login({ onBack, onRegister }) {
             Register Now
           </button>
         </p>
+
       </div>
     </div>
   );
