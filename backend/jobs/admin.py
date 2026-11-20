@@ -32,8 +32,16 @@ class JobAdmin(admin.ModelAdmin):
 
     list_editable = (
         "status",
-        "is_verified",
         "is_active",
     )
 
     ordering = ("-created_at",)
+
+    def save_model(self, request, obj, form, change):
+        if obj.status == "Approved":
+            obj.is_verified = True
+            obj.is_active = True
+        else:
+            obj.is_verified = False
+
+        super().save_model(request, obj, form, change)
