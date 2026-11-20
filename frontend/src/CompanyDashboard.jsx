@@ -364,6 +364,92 @@ async function handleJobSubmit(e) {
     alert("Could not connect to the server. Please try again.");
   }
 }
+
+async function handleJobSubmit(e) {
+  e.preventDefault();
+
+  const token = localStorage.getItem("nearbyJobsToken");
+
+  if (!token) {
+    alert("Please log in again.");
+    return;
+  }
+
+  if (!isVerified) {
+    alert("Your company must be verified before posting jobs.");
+    return;
+  }
+
+  const apiBaseUrl = (
+    import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8001"
+  ).replace(/\/+$/, "");
+
+  const isEditing = editingJobId !== null;
+
+  try {
+    const response = await fetch(
+      isEditing
+        ? `${apiBaseUrl}/api/company/jobs/${editingJobId}/`
+        : `${apiBaseUrl}/api/company/jobs/`,
+      {
+        method: isEditing ? "PATCH" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Token ${token}`
+        },
+        body: JSON.stringify({
+          title: job.title,
+          location: job.location,
+          job_type: job.type,
+          salary: job.salary,
+          description: job.description,
+          requirements: job.requirements
+        })
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      alert(data.error || data.detail || "Could not save the job.");
+      console.error("Job save error:", data);
+      return;
+    }
+
+    const formattedJob = {
+      id: data.id,
+      title: data.title,
+      location: data.location,
+      type: data.job_type,
+      salary: data.salary,
+      description: data.description,
+      requirements: data.requirements,
+      companyName: data.company,
+      companyEmail: verificationRequest?.email || "",
+      status: data.status,
+      isVerified: data.is_verified
+    };
+
+    const updatedJobs = isEditing
+      ? jobs.map((item) =>
+          item.id === editingJobId ? formattedJob : item
+        )
+      : [...jobs, formattedJob];
+
+    saveJobs(updatedJobs);
+    resetJobForm();
+
+    alert(
+      isEditing
+        ? "Job updated successfully! Submit it again for admin approval."
+        : "Job saved successfully in the database!"
+    );
+  } catch (error) {
+    console.error("Job save error:", error);
+    alert("Could not connect to the server. Please try again.");
+  }
+}
+
   // EDIT REJECTED JOB
   function editRejectedJob(item) {
     if (!isVerified) {
