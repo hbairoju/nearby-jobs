@@ -287,50 +287,83 @@ async function handleVerificationSubmit(e) {
   }
 
   // CREATE OR UPDATE JOB
-  function handleJobSubmit(e) {
-    e.preventDefault();
+ 
+async function handleJobSubmit(e) {
+  e.preventDefault();
 
-    if (editingJobId !== null) {
-      if (!isVerified) {
-        alert("Your company must be verified before resubmitting a job.");
-        return;
+  const token = localStorage.getItem("nearbyJobsToken");
+
+  if (!token) {
+    alert("Please log in again.");
+    return;
+  }
+
+  if (!isVerified) {
+    alert("Your company must be verified before posting jobs.");
+    return;
+  }
+
+  // Existing edit flow (we will connect this separately)
+  if (editingJobId !== null) {
+    alert("Job editing will be connected to the backend in the next step.");
+    return;
+  }
+
+  const apiBaseUrl = (
+    import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8001"
+  ).replace(/\/+$/, "");
+
+  try {
+    const response = await fetch(
+      `${apiBaseUrl}/api/company/jobs/`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Token ${token}`
+        },
+        body: JSON.stringify({
+          title: job.title,
+          location: job.location,
+          job_type: job.type,
+          salary: job.salary,
+          description: job.description,
+          requirements: job.requirements
+        })
       }
+    );
 
-      const updatedJobs = jobs.map((item) =>
-        item.id === editingJobId
-          ? {
-              ...item,
-              ...job,
-              status: "Pending Admin Approval",
-              submittedAt: new Date().toLocaleDateString("en-IN"),
-              reviewedAt: null
-            }
-          : item
-      );
+    const data = await response.json();
 
-      saveJobs(updatedJobs);
-      resetJobForm();
-
-      alert("Your updated job has been resubmitted for admin approval!");
+    if (!response.ok) {
+      alert(data.error || data.detail || "Could not save the job.");
+      console.error("Job creation error:", data);
       return;
     }
 
     const newJob = {
-      ...job,
-      id: Date.now(),
-      companyName: verificationRequest?.companyName || "",
+      id: data.id,
+      title: data.title,
+      location: data.location,
+      type: data.job_type,
+      salary: data.salary,
+      description: data.description,
+      requirements: data.requirements,
+      companyName: data.company,
       companyEmail: verificationRequest?.email || "",
-      status: "Draft",
-      date: new Date().toLocaleDateString("en-IN")
+      status: data.status,
+      isVerified: data.is_verified
     };
 
     saveJobs([...jobs, newJob]);
-
     resetJobForm();
 
-    alert("Job saved as draft successfully!");
+    alert("Job saved successfully in the database!");
+  } catch (error) {
+    console.error("Job submission error:", error);
+    alert("Could not connect to the server. Please try again.");
   }
-
+}
   // EDIT REJECTED JOB
   function editRejectedJob(item) {
     if (!isVerified) {
