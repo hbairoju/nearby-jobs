@@ -7,6 +7,7 @@ import MyApplications from "./MyApplications";
 import SavedJobs from "./SavedJobs";
 import CompanyDashboard from "./CompanyDashboard";
 import AdminDashboard from "./AdminDashboard";
+import ResetPassword from "./ResetPassword";
 
 import {
   Search,
@@ -215,10 +216,15 @@ function App() {
   const [showCompanyDashboard, setShowCompanyDashboard] = useState(false);
   const [showAdminDashboard, setShowAdminDashboard] = useState(false);
 const [apiJobs, setApiJobs] = useState([]);
+  // CHECK PASSWORD RESET URL
+  const resetPasswordMatch = window.location.pathname.match(
+    /^\/reset-password\/([^/]+)\/([^/]+)\/?$/
+  );
 const [jobsLoading, setJobsLoading] = useState(true);
 const [jobsError, setJobsError] = useState("");
 const [loggedInUser, setLoggedInUser] = useState(() => {
   const token = localStorage.getItem("nearbyJobsToken");
+
 
   if (!token) return null;
 
@@ -401,7 +407,19 @@ function handleLogout() {
       />
     );
   }
-
+    // PASSWORD RESET PAGE
+  if (resetPasswordMatch) {
+    return (
+      <ResetPassword
+        uid={decodeURIComponent(resetPasswordMatch[1])}
+        token={decodeURIComponent(resetPasswordMatch[2])}
+        onBack={() => {
+          window.history.replaceState({}, "", "/");
+          setShowLogin(true);
+        }}
+      />
+    );
+  }
   // COMPANY DASHBOARD
   if (showCompanyDashboard) {
     return (
