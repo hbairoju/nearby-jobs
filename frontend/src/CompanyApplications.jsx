@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   Users,
@@ -13,55 +13,203 @@ import {
   FileText
 } from "lucide-react";
 
-function CompanyApplications({ companyEmail, onBack }) {
-  const [applications, setApplications] = useState(() => {
-    try {
-      return JSON.parse(
-        localStorage.getItem("nearbyJobsApplications") || "[]"
-      );
-    } catch {
-      return [];
-    }
-  });
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8001";
 
-  // SHOW ONLY THIS COMPANY'S APPLICATIONS
-  const companyApplications = applications.filter(
-    (application) =>
-      application.companyEmail?.toLowerCase() ===
-      companyEmail?.toLowerCase()
-  );
+function CompanyApplications({ onBack }) {
+  const [applications, setApplications] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [updatingId, setUpdatingId] = useState(null);
+  const [downloadingId, setDownloadingId] = useState(null);
 
-  // UPDATE APPLICATION STATUS
-  function updateStatus(applicationId, newStatus) {
-    const updatedApplications = applications.map((application) =>
-      application.id === applicationId
-        ? {
-            ...application,
-            status: newStatus,
-            updatedAt: new Date().toLocaleDateString("en-IN")
+  // LOAD APPLICATIONS FROM DJANGO
+  useEffect(() => {
+    async function fetchApplications() {
+      const token = localStorage.getItem("nearbyJobsToken");
+
+      if (!token) {
+        setError("Please log in to view applications.");
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/api/company/applications/`,
+          {
+            headers: {
+              Authorization: `Token ${token}`
+            }
           }
-        : application
-    );
+        );
 
-    setApplications(updatedApplications);
+        const data = await response.json();
 
-    localStorage.setItem(
-      "nearbyJobsApplications",
-      JSON.stringify(updatedApplications)
-    );
+        if (!response.ok) {
+          throw new Error(
+            data.error ||
+            data.detail ||
+            "Unable to load applications."
+          );
+        }
 
-    alert(`Application ${newStatus.toLowerCase()} successfully!`);
+        setApplications(Array.isArray(data) ? data : []);
+
+      } catch (err) {
+        console.error("Company applications error:", err);
+        setError(err.message || "Something went wrong.");
+
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchApplications();
+  }, []);
+
+  // UPDATE STATUS IN DJANGO
+  async function updateStatus(applicationId, newStatus) {
+    const token = localStorage.getItem("nearbyJobsToken");
+
+    if (!token) {
+      alert("Please log in again.");
+      return;
+    }
+
+    setUpdatingId(applicationId);
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/company/applications/${applicationId}/`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Token ${token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            status: newStatus
+          })
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+          data.detail ||
+          "Unable to update application."
+        );
+      }
+
+      setApplications((previous) =>
+        previous.map((application) =>
+          application.id === applicationId
+            ? { ...application, status: data.status }
+            : application
+        )
+      );
+
+      alert(data.message || "Application status updated!");
+
+    } catch (err) {
+      console.error("Status update error:", err);
+      alert(err.message || "Unable to update status.");
+
+    } finally {
+      setUpdatingId(null);
+    }
   }
 
-  const pendingCount = companyApplications.filter(
+// SECURE RESUME DOWNLOAD
+async function downloadResume(application) {
+  const token = localStorage.getItem("nearbyJobsToken");
+
+  if (!token) {
+    alert("Please log in again.");
+    return;
+  }
+
+  setDownloadingId(application.id);
+
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/applications/${application.id}/resume/`,
+      {
+        headers: {
+          Authorization: `Token ${token}`
+        }
+      }
+    );
+
+    if (!response.ok) {
+      let errorMessage = "Unable to download resume.";
+
+      try {
+        const data = await response.json();
+        errorMessage = data.error || data.detail || errorMessage;
+      } catch {
+        // Keep the default error message.
+      }
+
+      throw new Error(errorMessage);
+    }
+
+    const blob = await response.blob();
+    const fileURL = window.URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = fileURL;
+    link.download = application.resume_name || "resume.pdf";
+
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    window.URL.revokeObjectURL(fileURL);
+
+  } catch (err) {
+    console.error("Resume download error:", err);
+    alert(err.message || "Unable to download resume.");
+
+  } finally {
+    setDownloadingId(null);
+  }
+}
+
+  function formatDate(date) {
+    if (!date) return "Date unavailable";
+
+    return new Date(date).toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric"
+    });
+  }
+
+  function getStatusIcon(status) {
+    if (status === "Shortlisted") {
+      return <CheckCircle size={18} />;
+    }
+
+    if (status === "Rejected") {
+      return <XCircle size={18} />;
+    }
+
+    return <Clock size={18} />;
+  }
+
+  const pendingCount = applications.filter(
     (application) => application.status === "Pending"
   ).length;
 
-  const shortlistedCount = companyApplications.filter(
+  const shortlistedCount = applications.filter(
     (application) => application.status === "Shortlisted"
   ).length;
 
-  const rejectedCount = companyApplications.filter(
+  const rejectedCount = applications.filter(
     (application) => application.status === "Rejected"
   ).length;
 
@@ -74,159 +222,202 @@ function CompanyApplications({ companyEmail, onBack }) {
         </button>
 
         <h1>Applications Received</h1>
-        <p>Review and manage candidates who applied for your jobs.</p>
 
-        {/* APPLICATION STATISTICS */}
+        <p>
+          Review and manage candidates who applied for your jobs.
+        </p>
 
-        <div className="dashboard-stats">
-          <div>
-            <Users size={24} />
-            <h2>{companyApplications.length}</h2>
-            <p>Total Applicants</p>
-          </div>
-
-          <div>
-            <Clock size={24} />
-            <h2>{pendingCount}</h2>
-            <p>Pending</p>
-          </div>
-
-          <div>
-            <CheckCircle size={24} />
-            <h2>{shortlistedCount}</h2>
-            <p>Shortlisted</p>
-          </div>
-
-          <div>
-            <XCircle size={24} />
-            <h2>{rejectedCount}</h2>
-            <p>Rejected</p>
-          </div>
-        </div>
-
-        {/* APPLICANT LIST */}
-
-        <h2 className="company-jobs-heading">
-          <Users size={21} /> Applicant Details
-        </h2>
-
-        {companyApplications.length === 0 ? (
+        {loading ? (
           <div className="empty-state">
-            <Users size={35} />
-            <h3>No applications received yet</h3>
-            <p>
-              Applications for your approved job postings
-              will appear here.
-            </p>
+            <p>Loading applications...</p>
+          </div>
+        ) : error ? (
+          <div className="empty-state">
+            <XCircle size={35} />
+            <h3>Unable to load applications</h3>
+            <p>{error}</p>
           </div>
         ) : (
-          companyApplications.map((application) => (
-            <div className="admin-request" key={application.id}>
+          <>
+            {/* APPLICATION STATISTICS */}
 
-              <div className="admin-request-header">
-                <Users size={25} />
-
-                <div>
-                  <h3>{application.name}</h3>
-                  <span
-                    className={`status-${application.status.toLowerCase()}`}
-                  >
-                    {application.status}
-                  </span>
-                </div>
+            <div className="dashboard-stats">
+              <div>
+                <Users size={24} />
+                <h2>{applications.length}</h2>
+                <p>Total Applicants</p>
               </div>
 
-              <p>
-                <BriefcaseBusiness size={15} />{" "}
-                <strong>Applied for:</strong> {application.jobTitle}
-              </p>
+              <div>
+                <Clock size={24} />
+                <h2>{pendingCount}</h2>
+                <p>Pending</p>
+              </div>
 
-              <p>
-                <Mail size={15} />{" "}
-                <strong>Email:</strong> {application.email}
-              </p>
+              <div>
+                <CheckCircle size={24} />
+                <h2>{shortlistedCount}</h2>
+                <p>Shortlisted</p>
+              </div>
 
-              <p>
-                <Phone size={15} />{" "}
-                <strong>Mobile:</strong> {application.mobile}
-              </p>
+              <div>
+                <XCircle size={24} />
+                <h2>{rejectedCount}</h2>
+                <p>Rejected</p>
+              </div>
+            </div>
 
-              <p>
-                <GraduationCap size={15} />{" "}
-                <strong>Education:</strong> {application.education}
-              </p>
+            {/* APPLICANT LIST */}
 
-              <p>
-                <strong>Applied on:</strong> {application.date}
-              </p>
+            <h2 className="company-jobs-heading">
+              <Users size={21} /> Applicant Details
+            </h2>
 
-              <p>
-                <strong>Cover Message:</strong>
-                <br />
-                {application.coverMessage || "No cover message provided."}
-              </p>
-
-              <p>
-                <FileText size={15} />{" "}
-                <strong>Resume:</strong>{" "}
-                {application.resumeName || "Not provided"}
-              </p>
-
-              {application.updatedAt && (
+            {applications.length === 0 ? (
+              <div className="empty-state">
+                <Users size={35} />
+                <h3>No applications received yet</h3>
                 <p>
-                  <strong>Last Updated:</strong> {application.updatedAt}
+                  Applications for your approved job postings
+                  will appear here.
                 </p>
-              )}
+              </div>
+            ) : (
+              applications.map((application) => (
+                <div
+                  className="admin-request"
+                  key={application.id}
+                >
 
-              {/* APPLICATION ACTIONS */}
+                  <div className="admin-request-header">
+                    <Users size={25} />
 
-              {application.status !== "Rejected" &&
-                application.status !== "Shortlisted" && (
-                  <div className="admin-actions">
+                    <div>
+                      <h3>{application.applicant_name}</h3>
 
+                      <span
+                        className={`status-${application.status.toLowerCase()}`}
+                      >
+                        {application.status}
+                      </span>
+                    </div>
+                  </div>
+
+                  <p>
+                    <BriefcaseBusiness size={15} />{" "}
+                    <strong>Applied for:</strong>{" "}
+                    {application.job_title}
+                  </p>
+
+                  <p>
+                    <Mail size={15} />{" "}
+                    <strong>Email:</strong> {application.email}
+                  </p>
+
+                  <p>
+                    <Phone size={15} />{" "}
+                    <strong>Mobile:</strong> {application.mobile}
+                  </p>
+
+                  <p>
+                    <GraduationCap size={15} />{" "}
+                    <strong>Education:</strong>{" "}
+                    {application.education}
+                  </p>
+
+                  <p>
+                    <strong>Applied on:</strong>{" "}
+                    {formatDate(application.applied_at)}
+                  </p>
+
+                  <p>
+                    <strong>Cover Message:</strong>
+                    <br />
+                    {application.cover_message ||
+                      "No cover message provided."}
+                  </p>
+
+                  <p>
+                    <FileText size={15} />{" "}
+                    <strong>Resume:</strong>{" "}
+                    {application.resume_name || "Not provided"}
+                  </p>
+
+                    {application.resume_name && (
                     <button
                       className="admin-approve"
-                      onClick={() =>
-                        updateStatus(application.id, "Shortlisted")
-                      }
+                      disabled={downloadingId === application.id}
+                      onClick={() => downloadResume(application)}
                     >
-                      <CheckCircle size={16} />
-                      Shortlist
+                      <FileText size={16} />
+                      {downloadingId === application.id
+                        ? "Downloading..."
+                        : "Download Resume"}
                     </button>
+                  )}
 
-                    <button
-                      className="admin-reject"
-                      onClick={() =>
-                        updateStatus(application.id, "Rejected")
-                      }
-                    >
-                      <XCircle size={16} />
-                      Reject
-                    </button>
 
-                  </div>
-                )}
+                  {/* APPLICATION ACTIONS */}
 
-              {application.status === "Shortlisted" && (
-                <p>
-                  <CheckCircle size={16} /> Candidate shortlisted.
-                </p>
-              )}
+                  {application.status === "Pending" && (
+                    <div className="admin-actions">
 
-              {application.status === "Rejected" && (
-                <p>
-                  <XCircle size={16} /> Application rejected.
-                </p>
-              )}
+                      <button
+                        className="admin-approve"
+                        disabled={updatingId === application.id}
+                        onClick={() =>
+                          updateStatus(
+                            application.id,
+                            "Shortlisted"
+                          )
+                        }
+                      >
+                        <CheckCircle size={16} />
+                        {updatingId === application.id
+                          ? "Updating..."
+                          : "Shortlist"}
+                      </button>
 
-            </div>
-          ))
+                      <button
+                        className="admin-reject"
+                        disabled={updatingId === application.id}
+                        onClick={() =>
+                          updateStatus(
+                            application.id,
+                            "Rejected"
+                          )
+                        }
+                      >
+                        <XCircle size={16} />
+                        {updatingId === application.id
+                          ? "Updating..."
+                          : "Reject"}
+                      </button>
+
+                    </div>
+                  )}
+
+                  {application.status === "Shortlisted" && (
+                    <p>
+                      <CheckCircle size={16} /> Candidate shortlisted.
+                    </p>
+                  )}
+
+                  {application.status === "Rejected" && (
+                    <p>
+                      <XCircle size={16} /> Application rejected.
+                    </p>
+                  )}
+
+                </div>
+              ))
+            )}
+          </>
         )}
 
         <p className="company-note">
-          Applicant management currently uses browser localStorage.
-          Secure access and real resume downloads will be added
-          when we build the backend.
+          Applicant details and status updates are loaded from
+          the Nearby Jobs database.
         </p>
 
       </div>

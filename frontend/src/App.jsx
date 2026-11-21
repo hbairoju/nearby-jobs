@@ -535,6 +535,17 @@ function handleLogout() {
     Company Dashboard
   </button>
 )}
+{loggedInUser.accountType === "jobseeker" && (
+  <button
+    className="register-btn"
+    onClick={() => {
+      setShowMyApplications(true);
+      setMobileMenu(false);
+    }}
+  >
+    My Applications
+  </button>
+)}
     <button className="register-btn" onClick={handleLogout}>
       Logout
     </button>

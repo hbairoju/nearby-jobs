@@ -57,3 +57,54 @@ class Job(models.Model):
 
     def __str__(self):
         return self.title
+
+class JobApplication(models.Model):
+
+    APPLICATION_STATUS = [
+        ("Pending", "Pending"),
+        ("Shortlisted", "Shortlisted"),
+        ("Rejected", "Rejected"),
+    ]
+
+    job = models.ForeignKey(
+        Job,
+        on_delete=models.CASCADE,
+        related_name="applications"
+    )
+
+    applicant = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="job_applications"
+    )
+
+    full_name = models.CharField(max_length=150)
+    email = models.EmailField()
+    mobile = models.CharField(max_length=10)
+    education = models.CharField(max_length=200)
+
+    cover_message = models.TextField(blank=True)
+
+    resume = models.FileField(
+        upload_to="resumes/"
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=APPLICATION_STATUS,
+        default="Pending"
+    )
+
+    applied_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["job", "applicant"],
+                name="unique_job_application_per_user"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.full_name} - {self.job.title}"

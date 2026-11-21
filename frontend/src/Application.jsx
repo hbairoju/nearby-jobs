@@ -2,6 +2,9 @@
 import { useState } from "react";
 import { ArrowLeft, Upload, FileText } from "lucide-react";
 
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8001";
+
 function Application({ job, onBack }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -9,8 +12,9 @@ function Application({ job, onBack }) {
   const [education, setEducation] = useState("");
   const [coverMessage, setCoverMessage] = useState("");
   const [resume, setResume] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
 
     if (!job) {
@@ -18,49 +22,70 @@ function Application({ job, onBack }) {
       return;
     }
 
-    const newApplication = {
-      id: Date.now(),
+    const token = localStorage.getItem("nearbyJobsToken");
 
-      // JOB DETAILS
-      jobId: job.id,
-      jobTitle: job.title,
-      company: job.company || job.companyName || "",
-      companyName: job.companyName || job.company || "",
-      companyEmail: job.companyEmail || "",
-
-      // APPLICANT DETAILS
-      name,
-      email,
-      mobile,
-      education,
-      coverMessage,
-
-      // APPLICATION DETAILS
-      resumeName: resume?.name || "",
-      date: new Date().toLocaleDateString("en-IN"),
-      status: "Pending"
-    };
-
-    let existingApplications = [];
-
-    try {
-      existingApplications = JSON.parse(
-        localStorage.getItem("nearbyJobsApplications") || "[]"
-      );
-    } catch {
-      existingApplications = [];
+    if (!token) {
+      alert("Please log in before applying for a job.");
+      return;
     }
 
-    existingApplications.push(newApplication);
+    if (!resume) {
+      alert("Please upload your PDF resume.");
+      return;
+    }
 
-    localStorage.setItem(
-      "nearbyJobsApplications",
-      JSON.stringify(existingApplications)
-    );
+    const formData = new FormData();
 
-    alert("Your application has been submitted successfully!");
+    formData.append("full_name", name);
+    formData.append("email", email);
+    formData.append("mobile", mobile);
+    formData.append("education", education);
+    formData.append("cover_message", coverMessage);
+    formData.append("resume", resume);
 
-    onBack();
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/jobs/${job.id}/apply/`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Token ${token}`,
+          },
+          body: formData,
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        const errorMessage =
+          data.error ||
+          data.detail ||
+          JSON.stringify(data);
+
+        throw new Error(errorMessage);
+      }
+
+      alert(
+        data.message ||
+        "Your application has been submitted successfully!"
+      );
+
+      onBack();
+
+    } catch (error) {
+      console.error("Application submission error:", error);
+
+      alert(
+        error.message ||
+        "Unable to submit your application. Please try again."
+      );
+
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -139,9 +164,13 @@ function Application({ job, onBack }) {
               accept=".pdf,application/pdf"
               required
               onChange={(e) => {
-                const selectedFile = e.target.files?.[0] || null;
+                const selectedFile =
+                  e.target.files?.[0] || null;
 
-                if (selectedFile && selectedFile.type !== "application/pdf") {
+                if (
+                  selectedFile &&
+                  selectedFile.type !== "application/pdf"
+                ) {
                   alert("Please select a PDF resume.");
                   e.target.value = "";
                   setResume(null);
@@ -168,14 +197,19 @@ function Application({ job, onBack }) {
             onChange={(e) => setCoverMessage(e.target.value)}
           />
 
-          <button className="auth-submit" type="submit">
-            Submit Application
+          <button
+            className="auth-submit"
+            type="submit"
+            disabled={isSubmitting}
+          >
+            {isSubmitting
+              ? "Submitting..."
+              : "Submit Application"}
           </button>
 
           <p className="application-note">
-            Your application details are currently saved in this
-            browser. Actual resume file uploads and secure server
-            storage will be implemented with the backend.
+            Your application and PDF resume will be submitted
+            securely to the Nearby Jobs server.
           </p>
 
         </form>

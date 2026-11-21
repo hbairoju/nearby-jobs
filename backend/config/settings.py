@@ -134,13 +134,18 @@ STORAGES = {
 }
 
 
-# Email
+
+# Email configuration
+# Resend API is used directly in jobs/views.py.
+# Console backend is retained for local development fallback.
+
 MAILERS = {
     "default": {
         "BACKEND": "django.core.mail.backends.console.EmailBackend",
     },
 }
 
+DEFAULT_FROM_EMAIL = "Nearby Jobs <noreply@nearbyjobs.com>"
 
 # React frontend connection
 CORS_ALLOWED_ORIGINS = [
